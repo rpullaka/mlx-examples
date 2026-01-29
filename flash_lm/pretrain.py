@@ -4,6 +4,7 @@ import os
 import time
 from functools import partial
 from pathlib import Path
+import wandb
 
 import datasets
 import mlx.core as mx
@@ -59,9 +60,9 @@ def iterate_batches(dataset, context_size, batch_size, max_batches=None):
                 d_next = []
             else:
                 d = next(dataset, None)
-            if d is None:
-                break
-            d = d["data"]
+                if d is None:
+                    break
+                d = d["data"]
             e = i + len(d)
             if e > len(batch):
                 trim = e - len(batch)
@@ -206,6 +207,21 @@ if __name__ == "__main__":
         type=str,
         help="Location to save the model and checkpoints",
     )
+    parser.add_argument(
+        "--wandb-name",
+        default=None,
+        type=str,
+        help="Name of experiment for wandb",
+    )
     args = parser.parse_args()
     config = utils.load_config(args.config)
+    if mx.distributed.init().rank() == 0:
+        wandb_kwargs = dict(
+            project="flash_lm",
+            name=args.wandb_name,
+            tags=["pretrain", config.model["model_type"]],
+        )
+        if args.wandb_name is None:
+            wandb_kwargs["mode"] = "disabled"
+        run = wandb.init(**wandb_kwargs)
     main(config, args.save_dir)
