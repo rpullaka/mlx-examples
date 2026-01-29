@@ -6,11 +6,11 @@ import os
 import re
 import types
 from pathlib import Path
-import wandb
 
 import mlx.core as mx
 import mlx.optimizers as optim
 import numpy as np
+import wandb
 
 os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
 import transformers
