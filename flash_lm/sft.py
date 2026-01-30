@@ -72,8 +72,6 @@ def iterate_batches(dataset, batch_size, max_length=None):
 
 
 def load_data(tokenizer, data_path="allenai/Dolci-Instruct-SFT", valid_size=1000):
-    random.seed(0)
-
     group = mx.distributed.init()
     size = group.size()
     rank = group.rank()
@@ -101,9 +99,6 @@ def load_data(tokenizer, data_path="allenai/Dolci-Instruct-SFT", valid_size=1000
                 mask.extend([False] * n_mask)
                 mask.extend([True] * (len(local_tokens) - n_mask))
             else:
-                import pdb
-
-                pdb.set_trace()
                 raise ValueError(f"Unknown role {role}")
             tokens.extend(local_tokens)
         return {"tokens": tokens, "mask": mask}
@@ -115,8 +110,8 @@ def load_data(tokenizer, data_path="allenai/Dolci-Instruct-SFT", valid_size=1000
     return train_ds, valid_ds
 
 
-def main(config, save_dir):
-
+def main(config, checkpoint_dir, save_dir):
+    random.seed(config.seed)
     np.random.seed(config.seed)
     mx.random.seed(config.seed)
 
@@ -124,18 +119,12 @@ def main(config, save_dir):
     batch_size = config.batch_size
     max_length = config.context_size
 
-    if rank == 0:
-        save_dir = Path(save_dir)
-        save_dir.mkdir(parents=True, exist_ok=True)
-        utils.save_config(save_dir, config)
-
     optimizer = utils.load_optimizer(config)
     tokenizer = utils.load_tokenizer()
     train_set, valid_set = load_data(tokenizer)
 
     model = utils.load_model(config.model)
-    # TODO get that from the config
-    #    model.load_weights("checkpoint/model.safetensors")
+    model.load_weights(str(Path(checkpoint_dir) / "model.safetensors"))
 
     dtype = getattr(mx, config.data_type)
 
@@ -225,22 +214,23 @@ def main(config, save_dir):
 
             if rank == 0:
                 if (it + 1) % config.steps_per_checkpoint == 0:
-                    utils.save_checkpoint(save_dir, it, params, optimizer)
-                    utils.save_checkpoint(save_dir, None, params, optimizer)
+                    utils.save_checkpoint(save_dir, it, params, optimizer, config)
+                    utils.save_checkpoint(save_dir, None, params, optimizer, config)
                 utils.log_metrics(metrics)
             metrics = utils.Metrics(tokens=metrics.tokens)
             tic = time.perf_counter()
 
-    utils.save_checkpoint(save_dir, None, params, optimizer)
+    if rank == 0:
+        utils.save_checkpoint(save_dir, None, params, optimizer, config)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Supervise fine-tune an LM.")
     parser.add_argument(
-        "--config",
-        default="configs/sft_default.py",
+        "--checkpoint-dir",
+        default="checkpoints",
         type=str,
-        help="Experiment config",
+        help="Location to load the pretrained model checkpoint",
     )
     parser.add_argument(
         "--save-dir",
@@ -255,7 +245,7 @@ if __name__ == "__main__":
         help="Name of experiment for wandb",
     )
     args = parser.parse_args()
-    config = utils.load_config(args.config)
+    config = utils.load_config(args.checkpoint_dir)
     if mx.distributed.init().rank() == 0:
         wandb_kwargs = dict(
             project="flash_lm",
@@ -265,4 +255,4 @@ if __name__ == "__main__":
         if args.wandb_name is None:
             wandb_kwargs["mode"] = "disabled"
         run = wandb.init(**wandb_kwargs)
-    main(config, args.save_dir)
+    main(config, args.checkpoint_dir, args.save_dir)

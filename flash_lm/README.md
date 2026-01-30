@@ -24,10 +24,16 @@ pip install mlx[cuda13]
 
 ### Run
 
-To run:
+For pretraining:
 
 ```
 python pretrian.py
+```
+
+For supervised fine-tuning (SFT):
+
+```
+python sft.py
 ```
 
 ### Next Steps 

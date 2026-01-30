@@ -84,11 +84,6 @@ def main(config, save_dir):
     batch_size = config.batch_size
     context_size = config.context_size
 
-    if rank == 0:
-        save_dir = Path(save_dir)
-        save_dir.mkdir(parents=True, exist_ok=True)
-        utils.save_config(save_dir, config)
-
     # data.download_eval_bundle()
 
     optimizer = utils.load_optimizer(config)
@@ -180,20 +175,21 @@ def main(config, save_dir):
 
             if rank == 0:
                 if (it + 1) % config.steps_per_checkpoint == 0:
-                    utils.save_checkpoint(save_dir, it, params, optimizer)
-                    utils.save_checkpoint(save_dir, None, params, optimizer)
+                    utils.save_checkpoint(save_dir, it, params, optimizer, config)
+                    utils.save_checkpoint(save_dir, None, params, optimizer, config)
                 utils.log_metrics(metrics)
             metrics = utils.Metrics(tokens=metrics.tokens)
             tic = time.perf_counter()
 
-    utils.save_checkpoint(save_dir, None, params, optimizer)
+    if rank == 0:
+        utils.save_checkpoint(save_dir, None, params, optimizer, config)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train an LM.")
     parser.add_argument(
         "--config",
-        default="configs/tiny.yaml",
+        default="configs/base_600m.yaml",
         type=str,
         help="Experiment config",
     )

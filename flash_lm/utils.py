@@ -35,6 +35,8 @@ yaml_loader.add_implicit_resolver(
 
 
 def load_config(config_path):
+    if not config_path.endswith(".yaml"):
+        config_path = Path(config_path) / "config.yaml"
     with open(config_path, "r") as fid:
         config = yaml.load(fid, yaml_loader)
         return types.SimpleNamespace(**config)
@@ -50,11 +52,13 @@ def load_tokenizer(path="awni/lmx"):
     return transformers.AutoTokenizer.from_pretrained(path)
 
 
-def save_checkpoint(save_dir, it, params, optimizer):
+def save_checkpoint(save_dir, it, params, optimizer, config):
     checkpoint_dir = Path(save_dir)
     if it is not None:
         checkpoint_dir /= f"{it:012d}"
     checkpoint_dir.mkdir(exist_ok=True, parents=True)
+    save_config(checkpoint_dir, config)
+
     mx.save_safetensors(
         str(checkpoint_dir / "model.safetensors"),
         dict(tree_flatten(params)),
