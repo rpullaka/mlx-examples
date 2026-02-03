@@ -35,8 +35,9 @@ yaml_loader.add_implicit_resolver(
 
 
 def load_config(config_path):
-    if not config_path.endswith(".yaml"):
-        config_path = Path(config_path) / "config.yaml"
+    config_path = Path(config_path)
+    if config_path.suffix != ".yaml":
+        config_path = config_path / "config.yaml"
     with open(config_path, "r") as fid:
         config = yaml.load(fid, yaml_loader)
         return types.SimpleNamespace(**config)

@@ -1,3 +1,4 @@
+import inspect
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Union
 
@@ -18,6 +19,16 @@ class ModelArgs:
     rope_theta: float = 10_000
     rms_norm_eps: float = 1e-5
     tie_word_embeddings: bool = True
+
+    @classmethod
+    def from_dict(cls, params):
+        return cls(
+            **{
+                k: v
+                for k, v in params.items()
+                if k in inspect.signature(cls).parameters
+            }
+        )
 
 
 class Attention(nn.Module):
