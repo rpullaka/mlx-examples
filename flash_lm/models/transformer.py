@@ -39,12 +39,12 @@ class Attention(nn.Module):
         self.n_heads = n_heads = args.num_attention_heads
         self.n_kv_heads = n_kv_heads = args.num_key_value_heads
 
-        head_dim = args.head_dim
+        self.head_dim = head_dim = args.head_dim
         self.scale = head_dim**-0.5
 
-        self.q_proj = nn.Linear(dim, n_heads * head_dim, bias=False)
-        self.k_proj = nn.Linear(dim, n_kv_heads * head_dim, bias=False)
-        self.v_proj = nn.Linear(dim, n_kv_heads * head_dim, bias=False)
+        self.qkv_proj = nn.Linear(
+            dim, (n_heads + 2 * n_kv_heads) * head_dim, bias=False
+        )
         self.o_proj = nn.Linear(n_heads * head_dim, dim, bias=False)
 
         self.q_norm = nn.RMSNorm(head_dim, eps=args.rms_norm_eps)
@@ -63,7 +63,14 @@ class Attention(nn.Module):
     ) -> mx.array:
         B, L, D = x.shape
 
-        queries, keys, values = self.q_proj(x), self.k_proj(x), self.v_proj(x)
+        queries, keys, values = mx.split(
+            self.qkv_proj(x),
+            [
+                self.n_heads * self.head_dim,
+                (self.n_heads + self.n_kv_heads) * self.head_dim,
+            ],
+            axis=-1,
+        )
 
         queries = self.q_norm(queries.reshape(B, L, self.n_heads, -1)).transpose(
             0, 2, 1, 3
@@ -91,12 +98,12 @@ class Attention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, dim, hidden_dim):
         super().__init__()
-        self.gate_proj = nn.Linear(dim, hidden_dim, bias=False)
+        self.gate_up_proj = nn.Linear(dim, 2 * hidden_dim, bias=False)
         self.down_proj = nn.Linear(hidden_dim, dim, bias=False)
-        self.up_proj = nn.Linear(dim, hidden_dim, bias=False)
 
     def __call__(self, x) -> mx.array:
-        return self.down_proj(nn.silu(self.gate_proj(x)) * self.up_proj(x))
+        gate, up = mx.split(self.gate_up_proj(x), 2, axis=-1)
+        return self.down_proj(nn.silu(gate) * up)
 
 
 class TransformerBlock(nn.Module):

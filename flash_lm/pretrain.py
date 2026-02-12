@@ -15,7 +15,7 @@ import numpy as np
 import utils
 import wandb
 from mlx.nn.utils import average_gradients
-from mlx.utils import tree_map, tree_reduce
+from mlx.utils import tree_map_with_path, tree_reduce
 
 
 def load_data(tokenizer, data_path="allenai/dolma3_mix-150B-1025", valid_size=1000):
@@ -93,9 +93,31 @@ def main(config, save_dir):
     model = utils.load_model(config.model)
     dtype = getattr(mx, config.data_type)
 
+    # Quantize the model if specified in the config
+    quant_params = set()
+    if quant := config.model.get("quantization", False):
+
+        def class_predicate(p, m):
+            if isinstance(m, nn.Linear):
+                quant_params.add(p + ".weight")
+                quant_params.add(p + ".scales")
+                return True
+            return False
+
+        nn.quantize(
+            model,
+            mode=quant["mode"],
+            quantize_input=True,
+            class_predicate=class_predicate,
+        )
+
     @mx.compile
     def loss_fn(params, sample):
-        model.update(tree_map(lambda x: x.astype(dtype), params))
+        model.update(
+            tree_map_with_path(
+                lambda p, x: x.astype(dtype) if p not in quant_params else x, params
+            )
+        )
         inputs = sample[:, :-1]
         targets = sample[:, 1:]
 
@@ -122,7 +144,7 @@ def main(config, save_dir):
         losses = 0
         ntoks = 0
         toks_per_batch = context_size * batch_size
-        for sample in data_it:  # data.prefetch(data_it):
+        for sample in data_it:
             loss = loss_fn(params, mx.array(sample))
             losses += loss * toks_per_batch
             mx.eval(losses)
@@ -144,9 +166,7 @@ def main(config, save_dir):
     metrics = utils.Metrics()
     tokens = 0
     tic = time.perf_counter()
-    for it, sample in zip(
-        range(0, config.num_steps), train_iterator
-    ):  # data.prefetch(train_iterator)):
+    for it, sample in zip(range(0, config.num_steps), train_iterator):
         loss, grad_norm, params = step(mx.array(sample), params)
         loss = mx.distributed.all_sum(loss) / world_size
         grad_norm = mx.distributed.all_sum(grad_norm) / world_size
@@ -164,13 +184,17 @@ def main(config, save_dir):
             tokens = 0
 
             if (it + 1) % config.steps_per_eval == 0:
-                # Do the evaluation in the final precision,
-                # but only cast the model once
-                eval_params = tree_map(lambda x: x.astype(dtype), params)
+                # Do the evaluation in the final precision, but only cast the model once
+                model.update(params)
+                model.eval()
+                model.set_dtype(dtype)
+                eval_params = model.parameters()
+                mx.eval(eval_params)
                 loss = eval_fn(eval_params, valid_set)
                 loss = mx.distributed.all_sum(loss) / world_size
                 metrics.valid_loss = loss.item()
                 metrics.valid_ppl = math.exp(metrics.valid_loss)
+                model.train()
                 model.update(params)
 
             if rank == 0:
