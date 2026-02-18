@@ -1,0 +1,12 @@
+{
+  "pythonPath": "/Users/rpullaka/miniconda3/envs/mlx-examples/bin/python",
+  "venvPath": "/Users/rpullaka/miniconda3/envs",
+  "venv": "mlx-examples",
+  "typeCheckingMode": "basic",
+  "autoSearchPaths": true,
+  "useLibraryCodeForTypes": true,
+  "diagnosticMode": "openFilesOnly",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "reportArgumentType": "warning"
+}
