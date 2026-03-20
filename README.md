@@ -8,6 +8,20 @@ Some more useful examples are listed below. Check-out [MLX
 LM](https://github.com/ml-explore/mlx-lm) for a more fully featured Python
 package for LLMs with MLX.
 
+
+### Pull from Upstream
+
+To pull upstream changes later:
+git fetch upstream
+git merge upstream/main
+git push origin main
+
+And from the ml-projects root, to update the submodule pointer after pulling:
+git add mlx-examples
+git commit -m "Update mlx-examples submodule"
+
+
+
 ### Text Models 
 
 - [Transformer language model](transformer_lm) training.
